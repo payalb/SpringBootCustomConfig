@@ -1,0 +1,112 @@
+PROBLEM
+You want to use properties to configure your application for different environments or executions.
+
+SOLUTION
+By default, Spring Boot supports getting properties from numerous locations. By default, it will load a file named application.properties, and use the environment variables and Java System properties. When running from the command line, it will also take command line arguments into consideration. There are more locations that are taken into account depending on the type of application and availability of capabilities (like JNDI, for instance).3 For our application the following resources are taken into considering in given order.
+1.	
+Command line arguments
+
+ 
+2.	
+application.properties outside of the packaged application
+
+ 
+3.	
+application.properties packaged inside the application
+
+ 
+Next to that, for options 2 and 3 you can also load a profile-specific one based on the active profiles. The profiles to activate can be passed through the spring.profiles.active property. The profile-specific application-{profile}.properties takes precedence over the non–profile-specific one. Each will get loaded and with that you can override properties, which makes the list a bit longer.
+1.	
+Command line arguments
+
+ 
+2.	
+application-{profile}.properties outside the packaged application
+
+ 
+3.	
+application.properties outside the packaged application
+
+ 
+4.	
+application-{profile}.properties packaged inside the application
+
+ 
+5.	
+application.properties packaged inside the application
+
+ 
+HOW IT WORKS
+The Calculator as created for Recipe 2.1 itself is pretty flexible; however, the CalculatorApplication has hardcoded values when it comes to the calculations it does. Now when we want to calculate something different, we would need to modify the code, recompile, and run the newly compiled code. We want to use properties for this so that we are able to change them when needed.
+
+First modify the application to use the value from properties instead of hardcoded values. For this, change the @Bean method for the ApplicationRunner to accept three additional parameters, and those parameters are going to be annotated with @Value .
+package com.apress.springbootrecipes.calculator;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+@SpringBootApplication
+public class CalculatorApplication {
+  public static void main(String[] args) {
+    SpringApplication.run(CalculatorApplication.class, args);
+  }
+  @Bean
+  public ApplicationRunner calculationRunner(Calculator calculator,
+                         @Value("${lhs}") int lhs,
+                         @Value("${rhs}") int rhs,
+                         @Value("${op}") char op) {
+    return args -> calculator.calculate(lhs, rhs, op);
+  }
+}
+The @Value will instruct Spring to look up the property and use the value of that property. For instance if we would use a @Value("${lhs}"), Spring would try to detect a property named lhs and use the value. You could also specify a default value by adding a semicolon. With @Value("${lhs:12}"), if no value can be found it will use 12. If there is no default value specified, an IllegalArgumentException will be thrown for missing properties. If we would now start the application, an exception would be thrown explaining that no property lhs could be found.
+
+Add an application.properties in src/main/resources and put values in there for lhs, rhs, and op.
+lhs=7
+rhs=6
+op=*
+Spring Boot will load the application.properties at startup, and with that the properties are available. Now when running the application, it should again create output honoring the values given in the application.properties.
+
+Although you now have externalized the properties into the application.properties, those are still packaged up inside the application, which would mean you still need to change them to do a different calculation. This would mean that for each combination of properties you would need a fresh build. Imagine doing this for a real production system and creating new artifacts just because your configuration needs to change. There are different ways in which Spring Boot can help you with that.
+
+Override Using an External application.properties
+First build the artifact and launch the application with java -jar recipe_2_2-1.0.0.jar. It will still run and use the supplied and packaged application.properties . Now, in the same location as the artifact add an application.properties and put values in there for the different properties.
+lhs=26
+rhs=952
+op=*
+When launching the application again, it will now use the values from this application.properties.
+
+Override Properties Using Profiles
+Spring Boot can use the active profiles to load additional configuration files, which can totally replace or override parts of the general configuration. Let’s add an application-add.properties in the src/main/resources, which contains a different value for op.
+op=+
+Now build the artifact (a JAR file) and launch it from the command line with java -jar recipe_2_2-1.0.0.jar --spring.profiles.active=add and it will start and use the properties from both application.properties and application-add.properties to configure the application. Notice how an addition instead of multiplication is done, which indicates that the application-add.properties take precedence over the general application. properties .
+
+TIPThis also works when working with an external application.properties and application-{profile}.properties.
+Override Properties Using Command Line Arguments
+The last option is to use command line arguments to override properties; in the previous section you already used command line argument --spring.profile.active=add to specify the active profile. You can also specify the lhs and other arguments that way. Use java -jar recipe_2_2-1.0.0.jar --lhs=12 --rhs=15 --op=+ to run the application, you will see that it does the calculation based on the arguments passed in through the command line. Arguments from the command line always override all other configuration.
+
+Load Properties from Different Configuration File
+If you are using another file than application.properties or you have some component that comes with an embedded file you want to load, you can always use an additional @PropertySource annotation on your @SpringBootApplication annotated class to load that additional file.
+@PropertySource("classpath:your-external.properties")
+@SpringBootApplication
+public class MyApplication { ... }
+The @PropertySource annotation allows you to add additional property files to be loaded during startup. Instead of using a @PropertySource, you can also instruct Spring Boot to load additional property files using the command line parameters from Table 2-1.
+Table 2-1Configuration Parameters
+Parameter
+
+Description
+
+spring.config.name
+
+Comma separated string of file names to load, default application
+
+spring.config.location
+
+Comma seperated string of resource locations (or files) to consider for loading property files from, default classpath:/,classpath:/config/,file:./,file:./config/
+
+spring.config.additional-location
+
+Comma seperated string of additional resource locations (or files) to consider for loading property files from, default empty
+
+WARNINGWhen using spring.config.location or spring.config.additional-location with a file, this will be used as is and a profile specific one won’t be loaded. When using a directory, then profile-specific files will be loaded.
+To load the your-external.properties using --spring.config.name=your-external would be sufficient; however, this would break loading the application.properties. It is better to use --spring.config.name=application,your-external; now all the location will be searched for both application.properties and your-external.properties and the profile-specific versions will be taken into consideration.
